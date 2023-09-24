@@ -29,17 +29,29 @@ end
 
 function Source._do_complete(self, ctx, callback)
   local max_lines = conf:get('max_lines')
-  local cursor = ctx.context.cursor
-  local cur_line = ctx.context.cursor_line
-  local cur_line_before = string.sub(cur_line, 1, cursor.col - 1)
 
-  local lines_before = api.nvim_buf_get_lines(0, math.max(0, cursor.line - max_lines), cursor.line, false)
-  table.insert(lines_before, cur_line_before)
-  local before = table.concat(lines_before, '\n')
+  local cursor = ctx.context.cursor
+  local cursor_line_idx = cursor.line
+
+  local cur_line = ctx.context.cursor_line
+  local cur_line_prev = string.sub(cur_line, 1, cursor.col - 1)
+  local cur_line_post = string.sub(cur_line, cursor.col, -1)
+
+  local prev_line_idx = math.max(cursor.line - max_lines / 2, 0)
+  local post_line_idx = cursor.line + max_lines / 2
+  local prev_lines = api.nvim_buf_get_lines(0, prev_line_idx, cursor_line_idx, false)
+  local post_lines = api.nvim_buf_get_lines(0, cursor_line_idx + 1, post_line_idx + 1, false)
+
+  local prev_text = table.concat(prev_lines, '\n') .. '\n' .. cur_line_prev
+  local post_text = cur_line_post .. '\n' .. table.concat(post_lines, '\n')
 
   local req = {
-    -- language = (vim.filetype.match({ buf = 0 }) or ''),
-    prompt = before,
+    -- prompt = prev_text,
+    language = vim.bo.filetype,
+    segments = {
+      prefix = prev_text,
+      suffix = post_text,
+    },
   }
   -- local res = curl.post(conf:get('host') .. '/v1/engines/codegen/completions', {
   --   body = vim.fn.json_encode(req),
@@ -102,7 +114,7 @@ function Source._do_complete(self, ctx, callback)
               },
               documentation = {
                 kind = cmp.lsp.MarkupKind.Markdown,
-                value = '```' .. (vim.filetype.match({ buf = 0 }) or '') .. '\n' .. cur_line_before .. newText .. '\n```',
+                value = '```' .. (vim.filetype.match({ buf = 0 }) or '') .. '\n' .. cur_line_prev .. newText .. '\n```',
               },
             }
             if result.text:find('.*\n.*') then
